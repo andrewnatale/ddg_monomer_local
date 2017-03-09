@@ -1,4 +1,4 @@
-# minimization.py
+# minimize.py
 # python 2.x script to run rosetta's minimize_with_cst application on an
 # input pdb file in preparation for running the ddg_monomer application
 
@@ -23,8 +23,7 @@ output_dir = os.getcwd()
 def get_settings():
     pass
 
-# what the command line should look like from rosetta documentation:
-# we're using a very new rosetta version, so don't modify the default score function
+# what the command line should look like from the rosetta documentation:
 """
 /path/to/minimize_with_cst.linuxgccrelease
 -in:file:l lst  -in:file:fullatom -ignore_unrecognized_res
@@ -43,7 +42,9 @@ os.path.join(rosetta_bindir,'%s.default.%s' % (rosetta_appname, platform_tag)),
 '-fa_max_dis', '9.0', '-ddg::harmonic_ca_tether', '0.5',
 '-ddg::constraint_weight', '1.0',
 '-ddg::out_pdb_prefix', 'min_cst_0.5',
-'-ddg::sc_min_only', 'false'
+'-ddg::sc_min_only', 'false',
+'-in:auto_setup_metals',
+'-score:patch', os.path.join(rosetta_db_dir, 'scoring/weights/score12.wts_patch')
 ]
 
 # add paramsfile options if needed !!UNTESTED!!
@@ -51,7 +52,7 @@ if input_params_file:
     rosetta_cmd.append('-extra_res_fa')
     rosetta_cmd.append(input_params_file)
 
-# write some info to the logfile
+# write some system info to the logfile
 os.chdir(output_dir)
 with open('mincst.log', 'w') as logfile:
     logfile.write("Python: %s\n" % sys.version)
@@ -59,7 +60,7 @@ with open('mincst.log', 'w') as logfile:
     logfile.write(' '.join(rosetta_cmd))
     logfile.write('\n')
 
-# call rosetta and output to log
+# call rosetta and write output to log
 with open('mincst.log', 'a+') as logfile:
     process = subprocess.Popen(rosetta_cmd, \
                                stdout=logfile, \
