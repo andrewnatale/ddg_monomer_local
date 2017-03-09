@@ -51,8 +51,7 @@ if input_params_file:
     rosetta_cmd.append('-extra_res_fa')
     rosetta_cmd.append(input_params_file)
 
-#print rosetta_cmd
-
+# write some info to the logfile
 os.chdir(output_dir)
 with open('mincst.log', 'w') as logfile:
     logfile.write("Python: %s\n" % sys.version)
@@ -60,6 +59,7 @@ with open('mincst.log', 'w') as logfile:
     logfile.write(' '.join(rosetta_cmd))
     logfile.write('\n')
 
+# call rosetta and output to log
 with open('mincst.log', 'a+') as logfile:
     process = subprocess.Popen(rosetta_cmd, \
                                stdout=logfile, \
