@@ -4,9 +4,12 @@
 
 import sys
 
-infile = sys.argv[1]
+try:
+    infile = sys.argv[1]
+except IndexError:
+    infile = 'mincst.log'
 
-with open('mincst.log', 'r') as logfile:
+with open(infile, 'r') as logfile:
     lines = logfile.readlines()
 
 with open('ca_dist_restraints.cst', 'w') as outfile:
