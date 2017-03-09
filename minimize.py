@@ -7,23 +7,24 @@ import sys
 import os
 import subprocess
 
-# make this convert to full path for safety
-input_pdb_file = sys.argv[1]
+# we have to input a list, because apparently single file input is broken in minimize_with_cst
+input_pdb_list = os.path.abspath(sys.argv[1])
 # paramsfiles?
-input_params_file = 'test'
+input_params_file = None
 
 # script default settings
-rosetta_bindir = "/some/dir"
+rosetta_bindir = "/opt/rosetta/rosetta_current/source/bin"
 rosetta_appname = "minimize_with_cst"
 platform_tag = "linuxgccrelease"
-rosetta_db_dir = "/some/otherdir/database"
+rosetta_db_dir = "/opt/rosetta/rosetta_current/database"
 output_dir = os.getcwd()
 
 # TODO: read in above settings from a file instead of hardcoding
 def get_settings():
     pass
 
-# what command line should look like from rosetta documentation:
+# what the command line should look like from rosetta documentation:
+# we're using a very new rosetta version, so don't modify the default score function
 """
 /path/to/minimize_with_cst.linuxgccrelease
 -in:file:l lst  -in:file:fullatom -ignore_unrecognized_res
@@ -33,10 +34,10 @@ def get_settings():
 -score:patch rosetta/main/database/scoring/weights/score12.wts_patch > mincst.log
 """
 
-# generate rosetta command line
+# generate rosetta command line args
 rosetta_cmd = [
-os.path.join(rosetta_bindir,'%s.%s' % (rosetta_appname, platform_tag)),
-'-in:file', input_pdb_file,
+os.path.join(rosetta_bindir,'%s.default.%s' % (rosetta_appname, platform_tag)),
+'-in:file:l', input_pdb_list,
 '-database', rosetta_db_dir,
 '-in:file:fullatom', '-ignore_unrecognized_res',
 '-fa_max_dis', '9.0', '-ddg::harmonic_ca_tether', '0.5',
@@ -45,16 +46,19 @@ os.path.join(rosetta_bindir,'%s.%s' % (rosetta_appname, platform_tag)),
 '-ddg::sc_min_only', 'false'
 ]
 
+# add paramsfile options if needed !!UNTESTED!!
 if input_params_file:
     rosetta_cmd.append('-extra_res_fa')
     rosetta_cmd.append(input_params_file)
 
-print rosetta_cmd
+#print rosetta_cmd
 
 os.chdir(output_dir)
 with open('mincst.log', 'w') as logfile:
     logfile.write("Python: %s\n" % sys.version)
     logfile.write("Host: %s\n" % socket.gethostname())
+    logfile.write(' '.join(rosetta_cmd))
+    logfile.write('\n')
 
 with open('mincst.log', 'a+') as logfile:
     process = subprocess.Popen(rosetta_cmd, \
