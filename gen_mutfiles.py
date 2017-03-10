@@ -21,7 +21,7 @@ try:
 except IndexError:
     blacklist = None
 
-# malke output directory
+# make output directory
 output_dir = os.path.join(os.getcwd(), 'resfiles')
 
 try:
@@ -107,8 +107,14 @@ if blacklist:
 with open(os.path.join(output_dir, 'resfiles.lst'), 'w') as out_list:
     count = 0
     for mutation in mutations:
-        with open(os.path.join(output_dir, '%s%s%s.res' % (mutation[0],mutation[1],mutation[2])), 'w') as resfile:
+        rfilename = '%s%s%s.res' % (mutation[0],mutation[1],mutation[2])
+        with open(os.path.join(output_dir, rfilename), 'w') as resfile:
             resfile.write('%s A PIKAA %s' % (mutation[1], mutation[2]))
-        out_list.write('%s\t%s\t%s\n' % (mutation[0],mutation[1],mutation[2]))
+        out_list.write('%s\n' % str(os.path.join(output_dir, rfilename)))
         count += 1
     print 'Wrote resfiles for %d mutations and listed them in \'resfiles.lst\'' % count
+
+with open(os.path.join(output_dir, 'mutations.lst'), 'w') as out_list:
+    for mutation in mutations:
+        out_list.write('%s\t%s\t%s\n' % (mutation[0],mutation[1],mutation[2]))
+    print 'Wrote considered mutations in blacklist format to \'mutations.lst\''

@@ -8,33 +8,45 @@ import os
 import subprocess
 import time
 
-time1 = time.time()
+#time1 = time.time()
 
+# inputs
 input_pdb_file = os.path.abspath(sys.argv[1])
-input_mut_file = os.path.abspath(sys.argv[2])
+cst_filename = os.path.abspath(sys.argv[2])
+input_mut_list = os.path.abspath(sys.argv[3])
+
+resfiles_dir = os.path.join(input_mut_list.split('/')[0:-2])
+
 # paramsfiles?
 input_params_file = None
 
-# script default settings
+# make output directory
+output_dir = os.path.join(os.getcwd(), 'ddg_monomer_out')
+try:
+    os.makedirs(output_dir)
+except OSError:
+    if os.path.isdir(output_dir):
+        print 'ERROR: Output directory \'ddg_monomer_out\' already exists, rename or remove it and re-run this script.'
+        raise
+
+# rosetta config
 rosetta_bindir = "/opt/rosetta/rosetta_current/source/bin"
 platform_tag = "linuxgccrelease"
 rosetta_db_dir = "/opt/rosetta/rosetta_current/database"
-output_dir = os.getcwd()
-
-# ddg_monomer settings and flags
 rosetta_appname = "ddg_monomer"
+
+# ddg_monomer options
 write_pdbs = True
-iterations = 5
-cst_filename = os.path.join(os.getcwd(), 'ca_dist_restraints.cst')
+iterations = 1
 # can these both be set 'true'? !!UNTESTED!!
-report_mean = False
-report_min = True
+report_mean = True
+report_min = False
 
 # TODO: read in above settings from a file instead of hardcoding
 def get_settings():
     pass
 
-# rosetta documentation recomended settings/flags
+# rosetta documentation recomended settings/flags for ddg_monomer
 """
 -in:file:s <pdbfile of the preminimized wildtype structure> # the PDB file of the structure on which point mutations should be made
 -ddg::mut_file <mutfile> # the list of point mutations to consider in this run
@@ -60,72 +72,74 @@ def get_settings():
 -ddg::output_silent true # write output to a silent file
 """
 
-# generate rosetta command line args
-# required flags
-rosetta_cmd = [
-os.path.join(rosetta_bindir,'%s.default.%s' % (rosetta_appname, platform_tag)),
-'-in:file:s',input_pdb_file,
-'-ddg::mut_file',input_mut_file,
-'-in:file:fullatom',
-'-ignore_unrecognized_res',
-'-fa_max_dis','9.0',
-'-ddg::suppress_checkpointing','true',
-'-ddg:weight_file','soft_rep_design',
-'-ddg::iterations',str(iterations),
-'-ddg::local_opt_only','false',
-'-ddg::min_cst','true',
-'-constraints::cst_file',cst_filename,
-'-ddg::mean','false','-ddg::min','true',
-'-ddg::sc_min_only','false',
-'-ddg::ramp_repulsive','true',
-'-ddg::suppress_checkpointing', 'true',
-'-in:auto_setup_metals'
-]
-# conditional flags
-# add paramsfile option if needed !!UNTESTED!!
-if input_params_file:
-    rosetta_cmd.append('-extra_res_fa')
-    rosetta_cmd.append(input_params_file)
-# write out pdbs?
-if write_pdbs:
-    rosetta_cmd.append('-ddg::dump_pdbs')
-    rosetta_cmd.append('true')
-else:
-    rosetta_cmd.append('-ddg::dump_pdbs')
-    rosetta_cmd.append('false')
-# report mean ddg score?
-if report_mean:
-    rosetta_cmd.append('-ddg::mean')
-    rosetta_cmd.append('true')
-else:
-    rosetta_cmd.append('-ddg::mean')
-    rosetta_cmd.append('false')
-# report min ddg score?
-if report_min:
-    rosetta_cmd.append('-ddg::min')
-    rosetta_cmd.append('true')
-else:
-    rosetta_cmd.append('-ddg::min')
-    rosetta_cmd.append('false')
+# input should be absolute path to a resfile
+def run_ddg_monomer(resfile):
+    # generate rosetta command line args
+    # required flags
+    rosetta_cmd = [
+    os.path.join(rosetta_bindir,'%s.default.%s' % (rosetta_appname, platform_tag)),
+    '-in:file:s',input_pdb_file,
+    '-resfile',resfile,
+    '-in:file:fullatom',
+    '-ignore_unrecognized_res',
+    '-fa_max_dis','9.0',
+    '-ddg::suppress_checkpointing','true',
+    '-ddg:weight_file','soft_rep_design',
+    '-ddg::iterations',str(iterations),
+    '-ddg::local_opt_only','false',
+    '-ddg::min_cst','true',
+    '-constraints::cst_file',cst_filename,
+    '-ddg::sc_min_only','false',
+    '-ddg::ramp_repulsive','true',
+    '-ddg::suppress_checkpointing', 'true',
+    '-in:auto_setup_metals'
+    ]
+    # conditional flags
+    # add paramsfile option if needed !!UNTESTED!!
+    if input_params_file:
+        rosetta_cmd.append('-extra_res_fa')
+        rosetta_cmd.append(input_params_file)
+    # write out pdbs?
+    if write_pdbs:
+        rosetta_cmd.append('-ddg::dump_pdbs')
+        rosetta_cmd.append('true')
+    else:
+        rosetta_cmd.append('-ddg::dump_pdbs')
+        rosetta_cmd.append('false')
+    # report mean ddg score?
+    if report_mean:
+        rosetta_cmd.append('-ddg::mean')
+        rosetta_cmd.append('true')
+    else:
+        rosetta_cmd.append('-ddg::mean')
+        rosetta_cmd.append('false')
+    # report min ddg score?
+    if report_min:
+        rosetta_cmd.append('-ddg::min')
+        rosetta_cmd.append('true')
+    else:
+        rosetta_cmd.append('-ddg::min')
+        rosetta_cmd.append('false')
 
+    # make a directory for this mutation
 
-# write some info to the logfile
-os.chdir(output_dir)
-with open('ddg.log', 'w') as logfile:
-    logfile.write("Python: %s\n" % sys.version)
-    logfile.write("Host: %s\n" % socket.gethostname())
-    logfile.write(' '.join(rosetta_cmd))
-    logfile.write('\n')
+    # write some info to the logfile
+    os.chdir(output_dir)
+    with open('ddg.log', 'w') as logfile:
+        logfile.write("Python: %s\n" % sys.version)
+        logfile.write("Host: %s\n" % socket.gethostname())
+        logfile.write(' '.join(rosetta_cmd))
+        logfile.write('\n')
 
-# call rosetta and output to log
-with open('ddg.log', 'a+') as logfile:
-    process = subprocess.Popen(rosetta_cmd, \
-                               stdout=logfile, \
-                               stderr=subprocess.STDOUT, \
-                               close_fds = True)
-    returncode = process.wait()
+    # call rosetta and output to log
+    with open('ddg.log', 'a+') as logfile:
+        process = subprocess.Popen(rosetta_cmd, \
+                                   stdout=logfile, \
+                                   stderr=subprocess.STDOUT, \
+                                   close_fds = True)
+        returncode = process.wait()
 
-time2 = time.time()
-runtime = time2 - time1
-with open('ddg.log', 'a+') as logfile:
-    logfile.write('\nruntime in sec: %s ' % str(runtime))
+# time2 = time.time()
+# runtime = time2 - time1
+# with open('ddg.log', 'a+') as logfile:
+#     logfile.write('\nruntime in sec: %s ' % str(runtime))
