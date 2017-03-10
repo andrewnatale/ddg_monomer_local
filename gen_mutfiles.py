@@ -11,19 +11,30 @@ from Bio.PDB.Polypeptide import is_aa
 
 # input - the pdb file should probably be a rosetta generated file for fewer unpleasant surprises
 pdb_file = sys.argv[1]
+
+# can be a filename or string 'all'
+mutants_input = sys.argv[2]
+
+# load a blacklist that will override the loaded or generated mutant list (for example to avoid duplication)
 try:
-    mutants_input = sys.argv[2]
+    blacklist = sys.argv[3]
 except IndexError:
-    mutants_input = 'all'
-# output directory
-output_dir = os.getcwd()
-# how granular should the lists be?
-mutations_per_list = 10
+    blacklist = None
+
+# malke output directory
+output_dir = os.path.join(os.getcwd(), 'resfiles')
+
+try:
+    os.makedirs(output_dir)
+except OSError:
+    if os.path.isdir(output_dir):
+        print 'ERROR: Output directory \'resfiles\' already exists, rename or remove it and re-run this script.'
+        raise
 
 # amino acids
 aas = 'ACDEFGHIKLMNPQRSTVWY'
 
-# parse pdb file to get sequence
+# parse pdb file to get a sequence
 p = PDBParser(PERMISSIVE=1)
 structure = p.get_structure(pdb_file, pdb_file)
 for model in structure:
@@ -41,14 +52,36 @@ for model in structure:
             print 'WARNING: Found chain with id other than \'A\'.'
             print 'If this chain is a protein, you will have problems with ddg_monomer later on (ligands are ok if you\'ve accounted for them).'
 
-# TODO: load list of mutations (not sure what format yet)
+print 'Found sequence in pdb file:'
+print ''.join(seq)
+
+# load list of mutations from a tsv file
 # should return a list of tuples with the format:
 # (wt aa id, res number, mut aa id)
-def load_list(list_file, sequence):
-    mut_list = dummy_muts
+def load_list(infile, sequence):
+    with open(infile, 'r') as mutations:
+        targets = mutations.readlines()
+    targets = [i.strip().split() for i in targets]
+    mut_list = []
+    for target in targets:
+        if target[0] == sequence[int(target[1])-1]:
+            print 'Adding \'%s %s %s\' to the list of mutations' % (target[0],target[1],target[2])
+            mut_list.append((target[0],target[1],target[2]))
+        else:
+           print 'WARNING: Cannot add \'%s %s %s\' because the wt residue does not match the pdb!' % (target[0],target[1],target[2])
     return mut_list
 
-# if no list is specified, generate mutfiles for every possible mutation
+# load a blacklist and edit mutation list before writing resfiles
+def load_blacklist(infile, target_list):
+    with open(infile, 'r') as mutations:
+        nontargets = mutations.readlines()
+    nontargets = [i.strip().split() for i in nontargets]
+    nontargets = [(i[0],i[1],i[2]) for i in nontargets]
+    print 'Applying blacklist to remove unwanted mutations...'
+    new_mut_list = [n for n in target_list if n not in nontargets]
+    return new_mut_list
+
+# if no list is specified, generate resfiles for every possible mutation
 def generate_list(sequence):
     mut_list = []
     for idx,res in enumerate(sequence):
@@ -58,16 +91,24 @@ def generate_list(sequence):
                 mut_list.append((res, num, aa))
     return mut_list
 
-dummy_muts = [
-('A', 105, 'D'),
-('Q', 250, 'F'),
-('G', 20, 'E'),
-('T', 106, 'A')
-]
-
+# parse or generate list
 if mutants_input == 'all':
-    targets = generate_list(seq)
+    print 'Generating resfiles for all possible mutations...'
+    mutations = generate_list(seq)
 else:
-    targets = load_list(mutants_input, seq)
+    print 'Generating resfiles based on input target mutations...'
+    mutations = load_list(mutants_input, seq)
 
-# generate mutfiles
+# operate on blacklist if requested
+if blacklist:
+    mutations = load_blacklist(blacklist, mutations)
+
+# generate resfiles
+with open(os.path.join(output_dir, 'resfiles.lst'), 'w') as out_list:
+    count = 0
+    for mutation in mutations:
+        with open(os.path.join(output_dir, '%s%s%s.res' % (mutation[0],mutation[1],mutation[2])), 'w') as resfile:
+            resfile.write('%s A PIKAA %s' % (mutation[1], mutation[2]))
+        out_list.write('%s\t%s\t%s\n' % (mutation[0],mutation[1],mutation[2]))
+        count += 1
+    print 'Wrote resfiles for %d mutations and listed them in \'resfiles.lst\'' % count
