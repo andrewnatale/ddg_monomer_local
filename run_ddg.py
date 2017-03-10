@@ -6,6 +6,9 @@ import socket
 import sys
 import os
 import subprocess
+import time
+
+time1 = time.time()
 
 input_pdb_file = os.path.abspath(sys.argv[1])
 input_mut_file = os.path.abspath(sys.argv[2])
@@ -21,8 +24,8 @@ output_dir = os.getcwd()
 # ddg_monomer settings and flags
 rosetta_appname = "ddg_monomer"
 write_pdbs = True
-iterations = 50
-cst_filename = 'ca_dist_restraints.cst'
+iterations = 5
+cst_filename = os.path.join(os.getcwd(), 'ca_dist_restraints.cst')
 # can these both be set 'true'? !!UNTESTED!!
 report_mean = False
 report_min = True
@@ -76,6 +79,7 @@ os.path.join(rosetta_bindir,'%s.default.%s' % (rosetta_appname, platform_tag)),
 '-ddg::sc_min_only','false',
 '-ddg::ramp_repulsive','true',
 '-ddg::suppress_checkpointing', 'true',
+'-in:auto_setup_metals'
 ]
 # conditional flags
 # add paramsfile option if needed !!UNTESTED!!
@@ -120,3 +124,8 @@ with open('ddg.log', 'a+') as logfile:
                                stderr=subprocess.STDOUT, \
                                close_fds = True)
     returncode = process.wait()
+
+time2 = time.time()
+runtime = time2 - time1
+with open('ddg.log', 'a+') as logfile:
+    logfile.write('\nruntime in sec: %s ' % str(runtime))
