@@ -9,15 +9,12 @@ import subprocess
 import time
 import multiprocessing
 
-# processes to run simultaneously - depends on machine
-processes = 3
-
 # inputs
 input_pdb_file = os.path.abspath(sys.argv[1])
 cst_filename = os.path.abspath(sys.argv[2])
 input_mut_list = os.path.abspath(sys.argv[3])
-
-#resfiles_dir = os.path.join(input_mut_list.split('/')[0:-2])
+# processes to run simultaneously
+processes = int(sys.argv[4])
 
 # paramsfiles?
 input_params_file = None
@@ -231,6 +228,12 @@ def dummy_funct(resfile):
     #                                close_fds = True)
     #     returncode = process.wait()
 
+    fake_cmd = ['echo', '\'%s\'' % mutation_name]
+    process = subprocess.Popen(fake_cmd, close_fds=True)
+    returncode = process.wait()
+
+    time.sleep(5)
+
     # write timing info to log
     time2 = time.time()
     runtime = time2 - time1
@@ -238,5 +241,5 @@ def dummy_funct(resfile):
         logfile.write('\nruntime in sec: %s ' % str(runtime))
 
 p = multiprocessing.Pool(processes)
-p.map(dummy_funct, resfiles)
-#p.map(run_ddg_monomer, resfiles)
+#p.map(dummy_funct, resfiles)
+p.map(run_ddg_monomer, resfiles)
