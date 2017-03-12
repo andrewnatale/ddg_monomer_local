@@ -1,0 +1,16 @@
+# define information about the rosetta installation to use
+
+# directory where rosetta binaries are located
+rosetta_bindir    /opt/rosetta/rosetta_current/source/bin
+
+# directory where rosetta database files are located
+rosetta_db_dir    /opt/rosetta/rosetta_current/database
+
+# tag that identifies binaries; something like 'linuxgccrelease' or 'macosclangrelease'
+platform_tag    linuxgccrelease
+
+# probably 'default' if you compiled rosetta, or 'static' if using precompiled
+bin_tag    default
+
+# number of processes to launch simultaneously for ddg calculations (should be <= number of logical processors available)
+processes 24
