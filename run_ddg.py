@@ -2,54 +2,6 @@
 # script to run rosetta's ddg_monomer application
 # takes input from preminimzation scripts and files defining target mutations as input
 
-import socket
-import sys
-import os
-import subprocess
-import time
-import multiprocessing
-
-# inputs
-input_pdb_file = os.path.abspath(sys.argv[1])
-cst_filename = os.path.abspath(sys.argv[2])
-input_mut_list = os.path.abspath(sys.argv[3])
-# processes to run simultaneously
-processes = int(sys.argv[4])
-
-# paramsfiles?
-input_params_file = None
-
-# make output directory
-output_dir = os.path.join(os.getcwd(), 'ddg_monomer_out')
-try:
-    os.makedirs(output_dir)
-except OSError:
-    if os.path.isdir(output_dir):
-        print 'ERROR: Output directory \'ddg_monomer_out\' already exists, rename or remove it and re-run this script.'
-        raise
-
-# rosetta config
-rosetta_bindir = "/opt/rosetta/rosetta_current/source/bin"
-platform_tag = "linuxgccrelease"
-rosetta_db_dir = "/opt/rosetta/rosetta_current/database"
-rosetta_appname = "ddg_monomer"
-
-# ddg_monomer options
-write_pdbs = True
-iterations = 1
-# can these both be set 'true'? !!UNTESTED!!
-report_mean = True
-report_min = False
-
-# load resfile list
-with open(input_mut_list, 'r') as resfile_list:
-    resfiles = resfile_list.readlines()
-resfiles = [i.strip() for i in resfiles]
-
-# TODO: read in above settings from a file instead of hardcoding
-def get_settings():
-    pass
-
 # rosetta documentation recomended settings/flags for ddg_monomer
 """
 -in:file:s <pdbfile of the preminimized wildtype structure> # the PDB file of the structure on which point mutations should be made
@@ -76,15 +28,81 @@ def get_settings():
 -ddg::output_silent true # write output to a silent file
 """
 
-# input should be absolute path to a resfile
-def run_ddg_monomer(resfile):
+import socket
+import sys
+import os
+import subprocess
+import time
+import multiprocessing
+
+# inputs
+input_pdb_file = os.path.abspath(sys.argv[1])
+cst_filename = os.path.abspath(sys.argv[2])
+input_mut_list = os.path.abspath(sys.argv[3])
+
+# paramsfiles?
+#input_params_file = None
+
+rosetta_appname = "ddg_monomer"
+
+# some ddg_monomer options
+write_pdbs = True
+iterations = 50
+report_mean = True # irrelevant since we're just generating a bunch of individual pairs of scores
+
+# just test?
+dummy = True
+
+# load settings file (must be in cwd)
+with open('rosetta.settings', 'r') as settingsfile:
+    s = settingsfile.readlines()
+s = [i.strip() for i in s]
+for line in s:
+    if line.startswith('#') or line == '':
+        continue
+    else:
+        elem = line.split()
+        if elem[0] == 'rosetta_bindir':
+            rosetta_bindir = elem[1]
+        elif elem[0] == 'rosetta_db_dir':
+            rosetta_db_dir = elem[1]
+        elif elem[0] == 'platform_tag':
+            platform_tag = elem[1]
+        elif elem[0] == 'bin_tag':
+            bin_tag = elem[1]
+        elif elem[0] == 'processes':
+            processes = elem[1]
+        else:
+            print '\nWARNING: Unrecognized setting: %s\n' % line
+
+# make output directory
+output_dir = os.path.join(os.getcwd(), 'ddg_monomer_out')
+try:
+    os.makedirs(output_dir)
+except OSError:
+    if os.path.isdir(output_dir):
+        print 'ERROR: Output directory \'ddg_monomer_out\' already exists, rename or remove it and re-run this script.'
+        raise
+
+# load resfile list
+with open(input_mut_list, 'r') as resfile_list:
+    resfiles = resfile_list.readlines()
+resfiles = [i.strip() for i in resfiles]
+
+# build a list for the multiprocessing map
+resfiles_x_iterations = []
+for rfilename in resfiles:
+    for n in range(1, iterations+1):
+        resfiles.append([rfilename, str(n)])
+
+def run_ddg_monomer((resfile, iteration)):
     # time this job
     time1 = time.time()
 
     # generate rosetta command line args
     # required flags
     rosetta_cmd = [
-    os.path.join(rosetta_bindir,'%s.default.%s' % (rosetta_appname, platform_tag)),
+    os.path.join(rosetta_bindir,'%s.%s.%s' % (rosetta_appname, bin_tag, platform_tag)),
     '-in:file:s',input_pdb_file,
     '-resfile',resfile,
     '-in:file:fullatom',
@@ -92,7 +110,7 @@ def run_ddg_monomer(resfile):
     '-fa_max_dis','9.0',
     '-ddg::suppress_checkpointing','true',
     '-ddg:weight_file','soft_rep_design',
-    '-ddg::iterations',str(iterations),
+    '-ddg::iterations','1',
     '-ddg::local_opt_only','false',
     '-ddg::min_cst','true',
     '-constraints::cst_file',cst_filename,
@@ -103,9 +121,9 @@ def run_ddg_monomer(resfile):
     ]
     # conditional flags
     # add paramsfile option if needed !!UNTESTED!!
-    if input_params_file:
-        rosetta_cmd.append('-extra_res_fa')
-        rosetta_cmd.append(input_params_file)
+    # if input_params_file:
+    #     rosetta_cmd.append('-extra_res_fa')
+    #     rosetta_cmd.append(input_params_file)
     # write out pdbs?
     if write_pdbs:
         rosetta_cmd.append('-ddg::dump_pdbs')
@@ -130,116 +148,41 @@ def run_ddg_monomer(resfile):
 
     # make a directory for this mutation
     mutation_name = resfile.split('/')[-1].split('.')[0]
-    job_dir = os.path.join(output_dir, mutation_name)
-    os.makedirs(job_dir)
+    job_dir = os.path.join(output_dir, mutation_name, iteration)
+    try:
+        os.makedirs(job_dir)
+    except OSError:
+        if not os.path.isdir(job_dir):
+            raise
 
     # write some system info to the log
     os.chdir(job_dir)
-    with open('ddg%s.log' % mutation_name, 'w') as logfile:
+    with open('ddg%s_%s.log' % (mutation_name, iteration), 'w') as logfile:
         logfile.write("Python: %s\n" % sys.version)
         logfile.write("Host: %s\n" % socket.gethostname())
         logfile.write(' '.join(rosetta_cmd))
         logfile.write('\n')
 
-    # call rosetta and output to log
-    with open('ddg%s.log' % mutation_name, 'a+') as logfile:
-        process = subprocess.Popen(rosetta_cmd, \
-                                   stdout=logfile, \
-                                   stderr=subprocess.STDOUT, \
-                                   close_fds = True)
+    if dummy:
+        fake_cmd = ['echo', '\'%s\'' % mutation_name]
+        process = subprocess.Popen(fake_cmd, close_fds=True)
         returncode = process.wait()
 
-    # write timing info to log
-    time2 = time.time()
-    runtime = time2 - time1
-    with open('ddg%s.log' % mutation_name, 'a+') as logfile:
-        logfile.write('\nruntime in sec: %s ' % str(runtime))
-
-# for testing multiprocessing - does everything except call rosetta
-def dummy_funct(resfile):
-    # time this job
-    time1 = time.time()
-
-    # generate rosetta command line args
-    # required flags
-    rosetta_cmd = [
-    os.path.join(rosetta_bindir,'%s.default.%s' % (rosetta_appname, platform_tag)),
-    '-in:file:s',input_pdb_file,
-    '-resfile',resfile,
-    '-in:file:fullatom',
-    '-ignore_unrecognized_res',
-    '-fa_max_dis','9.0',
-    '-ddg::suppress_checkpointing','true',
-    '-ddg:weight_file','soft_rep_design',
-    '-ddg::iterations',str(iterations),
-    '-ddg::local_opt_only','false',
-    '-ddg::min_cst','true',
-    '-constraints::cst_file',cst_filename,
-    '-ddg::sc_min_only','false',
-    '-ddg::ramp_repulsive','true',
-    '-ddg::suppress_checkpointing', 'true',
-    '-in:auto_setup_metals'
-    ]
-    # conditional flags
-    # add paramsfile option if needed !!UNTESTED!!
-    if input_params_file:
-        rosetta_cmd.append('-extra_res_fa')
-        rosetta_cmd.append(input_params_file)
-    # write out pdbs?
-    if write_pdbs:
-        rosetta_cmd.append('-ddg::dump_pdbs')
-        rosetta_cmd.append('true')
+        time.sleep(5)
     else:
-        rosetta_cmd.append('-ddg::dump_pdbs')
-        rosetta_cmd.append('false')
-    # report mean ddg score?
-    if report_mean:
-        rosetta_cmd.append('-ddg::mean')
-        rosetta_cmd.append('true')
-    else:
-        rosetta_cmd.append('-ddg::mean')
-        rosetta_cmd.append('false')
-    # report min ddg score?
-    if report_min:
-        rosetta_cmd.append('-ddg::min')
-        rosetta_cmd.append('true')
-    else:
-        rosetta_cmd.append('-ddg::min')
-        rosetta_cmd.append('false')
-
-    # make a directory for this mutation
-    mutation_name = resfile.split('/')[-1].split('.')[0]
-    job_dir = os.path.join(output_dir, mutation_name)
-    os.makedirs(job_dir)
-
-    # write some system info to the log
-    os.chdir(job_dir)
-    with open('ddg%s.log' % mutation_name, 'w') as logfile:
-        logfile.write("Python: %s\n" % sys.version)
-        logfile.write("Host: %s\n" % socket.gethostname())
-        logfile.write(' '.join(rosetta_cmd))
-        logfile.write('\n')
-
-    # # call rosetta and output to log
-    # with open('ddg%s.log' % mutation_name, 'a+') as logfile:
-    #     process = subprocess.Popen(rosetta_cmd, \
-    #                                stdout=logfile, \
-    #                                stderr=subprocess.STDOUT, \
-    #                                close_fds = True)
-    #     returncode = process.wait()
-
-    fake_cmd = ['echo', '\'%s\'' % mutation_name]
-    process = subprocess.Popen(fake_cmd, close_fds=True)
-    returncode = process.wait()
-
-    time.sleep(5)
+        # call rosetta and output to log
+        with open('ddg%s_%s.log' % (mutation_name, iteration), 'a+') as logfile:
+            process = subprocess.Popen(rosetta_cmd, \
+                                       stdout=logfile, \
+                                       stderr=subprocess.STDOUT, \
+                                       close_fds = True)
+            returncode = process.wait()
 
     # write timing info to log
     time2 = time.time()
     runtime = time2 - time1
-    with open('ddg%s.log' % mutation_name, 'a+') as logfile:
+    with open('ddg%s_%s.log' % (mutation_name, iteration), 'a+') as logfile:
         logfile.write('\nruntime in sec: %s ' % str(runtime))
 
 p = multiprocessing.Pool(processes)
-#p.map(dummy_funct, resfiles)
-p.map(run_ddg_monomer, resfiles)
+p.map(run_ddg_monomer, resfiles_x_iterations)

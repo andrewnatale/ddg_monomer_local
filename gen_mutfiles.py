@@ -1,7 +1,19 @@
 # gen_mutfiles.py
-# a script to generate mutation specification files for running rosetta's
-# ddg_monomer application
-# depends on Biopython's PDB parsing module
+# python 2.x
+"""
+A script to generate mutation specification files (resfiles) for running rosetta's ddg_monomer application.
+Depends on Biopython's PDB parsing module.
+
+Arguments:
+
+1st - input PDB file - ideally a rosetta generated PDB (like the output of the minimization step)
+
+2nd - either path to a .tsv file specifing mutations; or 'all' to generate files for all possible mutations
+
+3rd (optional) - blacklist of mutations not to use
+
+Outputs files into a new directory 'resfiles' in the cwd. In addition to resfiles, writes a list for input into the next step.
+"""
 
 import os
 import sys
@@ -71,16 +83,6 @@ def load_list(infile, sequence):
            print 'WARNING: Cannot add \'%s %s %s\' because the wt residue does not match the pdb!' % (target[0],target[1],target[2])
     return mut_list
 
-# load a blacklist and edit mutation list before writing resfiles
-def load_blacklist(infile, target_list):
-    with open(infile, 'r') as mutations:
-        nontargets = mutations.readlines()
-    nontargets = [i.strip().split() for i in nontargets]
-    nontargets = [(i[0],i[1],i[2]) for i in nontargets]
-    print 'Applying blacklist to remove unwanted mutations...'
-    new_mut_list = [n for n in target_list if n not in nontargets]
-    return new_mut_list
-
 # if no list is specified, generate resfiles for every possible mutation
 def generate_list(sequence):
     mut_list = []
@@ -90,6 +92,15 @@ def generate_list(sequence):
             if res != aa:
                 mut_list.append((res, num, aa))
     return mut_list
+
+# load a blacklist and edit mutation list before writing resfiles
+def load_blacklist(infile, target_list):
+    with open(infile, 'r') as mutations:
+        nontargets = mutations.readlines()
+    nontargets = [i.strip().split() for i in nontargets]
+    nontargets = [(i[0],i[1],i[2]) for i in nontargets]
+    new_mut_list = [n for n in target_list if n not in nontargets]
+    return new_mut_list
 
 # parse or generate list
 if mutants_input == 'all':
@@ -101,6 +112,7 @@ else:
 
 # operate on blacklist if requested
 if blacklist:
+    print 'Applying blacklist to remove unwanted mutations...'
     mutations = load_blacklist(blacklist, mutations)
 
 # generate resfiles
@@ -109,7 +121,9 @@ with open(os.path.join(output_dir, 'resfiles.lst'), 'w') as out_list:
     for mutation in mutations:
         rfilename = '%s%s%s.res' % (mutation[0],mutation[1],mutation[2])
         with open(os.path.join(output_dir, rfilename), 'w') as resfile:
-            resfile.write('%s A PIKAA %s' % (mutation[1], mutation[2]))
+            resfile.write('NATAA\n')
+            resfile.write('start\n')
+            resfile.write('%s A PIKAA %s\n' % (mutation[1], mutation[2]))
         out_list.write('%s\n' % str(os.path.join(output_dir, rfilename)))
         count += 1
     print 'Wrote resfiles for %d mutations and listed them in \'resfiles.lst\'' % count
@@ -117,4 +131,4 @@ with open(os.path.join(output_dir, 'resfiles.lst'), 'w') as out_list:
 with open(os.path.join(output_dir, 'mutations.lst'), 'w') as out_list:
     for mutation in mutations:
         out_list.write('%s\t%s\t%s\n' % (mutation[0],mutation[1],mutation[2]))
-    print 'Wrote considered mutations in blacklist format to \'mutations.lst\''
+    print 'Wrote considered mutations in blacklist format to \'processed_mutations.lst\''
